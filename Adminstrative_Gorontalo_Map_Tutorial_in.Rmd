@@ -1,0 +1,1758 @@
+---
+title: "Mapping Gorontalo Province with R"
+author: "Irvan Nani"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: paged
+---
+
+# Introduction
+
+Welcome to our tutorial on mapping Gorontalo Province using R!
+
+In this tutorial, we will create an administrative map of Gorontalo Province, Indonesia, showing its five regencies and one city.
+
+We will work with spatial data, explore administrative boundaries, customise map colours, add geographic labels, and export our final map in high-resolution formats.
+
+By the end of this tutorial, we will have created a map suitable for academic research and learned how to reproduce a similar map for other regions.
+
+## What will we learn?
+
+Throughout this tutorial, we will learn how to:
+
+1. Retrieve administrative boundary data.
+2. Explore and manipulate spatial datasets.
+3. Extract Gorontalo's administrative divisions.
+4. Create maps using `ggplot2`.
+5. Add labels and customise map aesthetics.
+6. Export maps as PNG and PDF files.
+
+# Preparing Our R Environment
+
+Before we begin mapping, let's prepare our R environment by loading the required packages.
+
+## Let's load our packages!
+
+We will use four R packages for spatial data processing, manipulation, visualisation, and labelling.
+
+```{r load-packages}
+
+# Let's load our packages!
+library(sf)       # Spatial data
+library(dplyr)    # Data manipulation
+library(ggplot2)  # Map visualisation
+library(ggrepel)  # Map labels
+
+```
+
+## Understanding our packages
+
+Each package serves a different purpose:
+
+| Package | Purpose |
+|:--------|:--------|
+| `sf` | Reading, processing, and managing spatial data |
+| `dplyr` | Filtering, selecting, and transforming data |
+| `ggplot2` | Creating and customising maps |
+| `ggrepel` | Positioning labels while reducing overlaps |
+
+Together, these packages provide the tools needed to build our administrative map.
+
+## A quick note before we kick off
+
+<div style="background-color: #eaf4ff; border-left: 4px solid #2878b5; padding: 12px; border-radius: 5px;">
+<strong>Note</strong>
+<p>If you have already installed these packages, you only need to load them using <code>library()</code>. You do not need to reinstall them every time you open RStudio.</p>
+</div>
+
+## What have we learned?
+
+We have prepared our R environment and identified the packages required for mapping.
+
+We are now ready to retrieve the spatial data for Gorontalo Province!
+
+# Retrieving Provincial Boundary of Gorontalo
+
+Now that our R environment is ready, let's retrieve the geographic data needed to create our map!
+
+Before exploring Gorontalo's five regencies and one city, we first need to obtain the provincial boundary.
+
+We will use administrative boundary data from `wilayah-id`, which provides geographic features for Indonesia.
+
+## Let's retrieve Indonesian provincial boundaries!
+
+First, we need to construct a URL to access the spatial dataset.
+
+```{r retrieve-gorontalo}
+
+# Let's retrieve the provincial boundaries!
+url_provinces <- paste0(
+  "https://wilayah-id-api.dhanypedia.com",
+  "/api/v1/ogc/features/collections/provinces/items",
+  "?limit=100&f=geojson"
+)
+
+Indonesian_map_level1 <- sf::st_read(
+  url_provinces,
+  quiet = TRUE
+)
+
+# Let's inspect our dataset!
+names(Indonesian_map_level1)
+nrow(Indonesian_map_level1)
+
+```
+
+**Understanding our code**
+
+Let's explore the functions we have just used!
+
+| Function | What does it do? |
+|:---------|:-----------------|
+| `paste0()` | Combines text strings to construct our data URL |
+| `st_read()` | Reads geographic data into R |
+| `quiet = TRUE` | Suppresses routine data-loading messages |
+| `names()` | Displays the variable names in our dataset |
+| `nrow()` | Counts the number of observations |
+
+The URL requests geographic features in GeoJSON format, which can be read directly using the `sf` package.
+
+**What should we expect?**
+
+The dataset should contain 38 provincial features, representing Indonesia's 38 provinces.
+
+## Let's extract Gorontalo Province!
+
+Now that we have retrieved the provincial boundaries, let's focus on Gorontalo.
+
+We can use `filter()` from the `dplyr` package to select the province we need.
+
+```{r extract-gorontalo-province}
+
+# Let's extract Gorontalo Province!
+gorontalo_province <- Indonesian_map_level1 %>%
+  filter(nama_provinsi == "Gorontalo")
+
+# Let's inspect our result!
+print(gorontalo_province)
+
+# Let's count our selected provinces!
+nrow(gorontalo_province)
+
+```
+
+**Understanding our code**
+
+The pipe operator `%>%` passes the dataset to the next function.
+
+The `filter()` function selects observations that satisfy a particular condition.
+
+Here, we use:
+
+`nama_provinsi == "Gorontalo"`
+
+This tells R to select only the observation whose province name is Gorontalo.
+
+**What should we expect?**
+
+The final command should return:
+
+```text
+[1] 1
+```
+
+This confirms that we have successfully extracted one provincial feature.
+
+## Let's take a quick look at our provincial boundary!
+
+Before moving on to the regencies and city, let's visualise the provincial boundary.
+
+```{r preview-gorontalo-boundary}
+
+# Let's preview Gorontalo Province!
+ggplot() +
+  geom_sf(
+    data = gorontalo_province,
+    fill = "lightblue",
+    color = "grey30"
+  ) +
+  labs(
+    title = "Gorontalo Province"
+  ) +
+  theme_minimal()
+
+```
+
+**Understanding our code**
+
+- `ggplot()` initialises our visualisation.
+- `geom_sf()` draws the geographic boundary.
+- `fill` determines the colour inside the province.
+- `color` determines the boundary colour.
+- `labs()` adds a map title.
+- `theme_minimal()` provides a clean visual appearance.
+
+At this stage, we are only visualising the provincial boundary. The internal boundaries of the five regencies and one city will be added in the next steps.
+
+## What have we learned?
+
+In this step, we have learned how to:
+
+1. Retrieve geographic data from an online source.
+2. Import GeoJSON data using `sf`.
+3. Inspect the structure of a spatial dataset.
+4. Extract a specific province using `dplyr`.
+5. Visualise a provincial boundary using `ggplot2`.
+
+We now have our first spatial object, `gorontalo_province`, which will serve as the foundation for our administrative map.
+
+Next, let's retrieve Gorontalo's five regencies and one city!
+
+# Retrieving Administrative Divisions of Gorontalo Province
+
+Now that we have obtained Gorontalo's provincial boundary, let's explore its administrative divisions!
+
+Gorontalo Province consists of five regencies (*kabupaten*) and one city (*kota*). To map these divisions, we need a more detailed spatial dataset containing regency and city boundaries.
+
+## Let's retrieve Indonesian regency and city boundaries!
+
+We will use the same data source as before, but this time we will retrieve administrative boundaries at the regency and city level.
+
+```{r retrieve-gorontalo-regencies}
+
+# Let's retrieve the regency and city boundaries!
+url_regencies <- paste0(
+  "https://wilayah-id-api.dhanypedia.com",
+  "/api/v1/ogc/features/collections/regencies/items",
+  "?limit=1000&f=geojson"
+)
+
+Indonesian_map_level2 <- sf::st_read(
+  url_regencies,
+  quiet = TRUE
+)
+
+# Let's inspect our dataset!
+names(Indonesian_map_level2)
+
+# Let's inspect the first six records!
+head(sf::st_drop_geometry(Indonesian_map_level2))
+
+```
+
+**Understanding our code**
+
+We use the same functions introduced in Step 2, but there are two important differences.
+
+First, our URL now contains `regencies` instead of `provinces`. This allows us to retrieve administrative boundaries at a more detailed level.
+
+Second, we use `st_drop_geometry()` to inspect the attribute data without displaying the geographic shapes.
+
+| Function | What does it do? |
+|:---------|:-----------------|
+| `paste0()` | Constructs the URL for our spatial dataset |
+| `st_read()` | Imports the geographic features into R |
+| `names()` | Displays the available variables |
+| `st_drop_geometry()` | Removes the geometry column from a displayed dataset |
+| `head()` | Displays the first six observations |
+
+**What should we expect?**
+
+Our dataset should contain several variables describing Indonesia's regencies and cities, including their administrative codes, names, and geographic boundaries.
+
+## Let's explore our administrative variables!
+
+Before extracting Gorontalo's administrative divisions, let's examine the variables that will be particularly useful for our map.
+
+| Variable | Description |
+|:---------|:------------|
+| `kode_kab` | Regency or city administrative code |
+| `kode_prov` | Province administrative code |
+| `nama_kabupaten` | Regency or city name |
+| `tipe` | Administrative division type |
+| `area_km2` | Area in square kilometres |
+| `jumlah_penduduk` | Population |
+| `geometry` | Geographic boundaries |
+
+The `geometry` column is particularly important because it contains the spatial information needed to draw our map.
+
+Meanwhile, `kode_prov` will allow us to identify which regencies and cities belong to Gorontalo Province.
+
+## Let's check our spatial data!
+
+Now, let's confirm that our dataset contains valid spatial information.
+
+```{r inspect-regency-spatial-data}
+
+# Let's check the spatial data type!
+class(Indonesian_map_level2)
+
+# Let's check the coordinate reference system!
+sf::st_crs(Indonesian_map_level2)
+
+# Let's count the geographic features!
+nrow(Indonesian_map_level2)
+
+```
+
+**Understanding our code**
+
+- `class()` identifies the type of object we are working with.
+- `st_crs()` displays the coordinate reference system (CRS).
+- `nrow()` counts the geographic features in our dataset.
+
+A coordinate reference system tells R how geographic coordinates relate to locations on Earth.
+
+Understanding the CRS is important because we will later calculate label positions and visualise geographic boundaries.
+
+**Note:** The number of features returned depends on the API response. We should not assume that all Indonesian regencies and cities have been retrieved without checking the results.
+
+## What have we learned?
+
+In this step, we have learned how to:
+
+1. Retrieve administrative boundaries at the regency and city level.
+2. Inspect the attributes of a spatial dataset.
+3. Identify variables needed for administrative mapping.
+4. Examine the coordinate reference system.
+5. Check the number of geographic features retrieved.
+
+We now have our second spatial dataset, i.e., `Indonesian_map_level2`.
+
+Next, let's use code for Gorontalo Province to extract its five regencies and one city!
+
+# Extracting Administrative Divisions of Gorontalo Province
+
+We have successfully retrieved Indonesia's regency and city boundaries. However, our dataset contains administrative divisions from across Indonesia.
+
+Since our goal is to map Gorontalo Province, we need to extract only the regencies and city belonging to Gorontalo.
+
+Let's use administrative codes to identify them!
+
+## Let's identify code of Gorontalo Province
+
+Each Indonesian province has a unique administrative code. This code allows us to link provincial data with regency and city data.
+
+```{r identify-gorontalo-code}
+
+# Let's identify Gorontalo's province code!
+gorontalo_code <- unique(gorontalo_province$kode_prov)
+
+# Let's inspect the code!
+print(gorontalo_code)
+
+```
+
+**Understanding our code**
+
+We use two important elements:
+
+| Code | What does it do? |
+|:-----|:-----------------|
+| `$kode_prov` | Extracts the province code column |
+| `unique()` | Returns distinct values from that column |
+
+Since `gorontalo_province` contains only one province, we expect to retrieve one unique administrative code.
+
+This code will help us identify Gorontalo's regencies and city in the larger dataset.
+
+## Let's extract regencies and city of Gorontalo
+
+Now, let's use `filter()` to select the administrative divisions associated with Gorontalo's province code.
+
+```{r extract-gorontalo-regencies}
+
+# Let's extract Gorontalo's administrative divisions!
+gorontalo_regencies <- Indonesian_map_level2 %>%
+  filter(
+    as.character(kode_prov) == as.character(gorontalo_code)
+  )
+
+# Let's inspect our results!
+print(
+  sf::st_drop_geometry(gorontalo_regencies) %>%
+    select(kode_kab, nama_kabupaten, tipe)
+)
+
+```
+
+**Understanding our code**
+
+The `filter()` function selects observations whose `kode_prov` matches Gorontalo's province code.
+
+We also use `as.character()` to ensure that the two administrative codes are compared as character strings.
+
+Finally, `select()` displays only the variables relevant to our inspection.
+
+**Why do we use administrative codes instead of names?**
+
+Administrative codes provide a more systematic way to identify geographic regions.
+
+Rather than searching for individual regency names, we can retrieve all administrative divisions associated with a particular province.
+
+This approach can also be adapted to other Indonesian provinces.
+
+## Let's verify our administrative divisions
+
+Gorontalo Province consists of five regencies and one city.
+
+Let's check whether our dataset contains all six administrative divisions.
+
+```{r verify-gorontalo-regencies}
+
+# Let's count our administrative divisions!
+nrow(gorontalo_regencies)
+
+# Let's list their names!
+unique(gorontalo_regencies$nama_kabupaten)
+
+# Let's verify that we have six divisions!
+stopifnot(nrow(gorontalo_regencies) == 6)
+
+```
+
+**What should we expect?**
+
+The `nrow()` function should return:
+
+```text
+[1] 6
+```
+
+Our dataset should contain the following administrative divisions:
+
+| Administrative division | Type |
+|:------------------------|:-----|
+| Boalemo | Regency |
+| Bone Bolango | Regency |
+| Gorontalo | Regency |
+| Gorontalo Utara | Regency |
+| Pohuwato | Regency |
+| Kota Gorontalo | City |
+
+The exact Indonesian names may include the prefixes `Kabupaten` and `Kota`, depending on how they are recorded in the dataset.
+
+**Understanding our code**
+
+- `nrow()` counts the extracted geographic features.
+- `unique()` lists distinct administrative names.
+- `stopifnot()` checks whether a specified condition is satisfied.
+
+If the dataset does not contain exactly six features, `stopifnot()` will stop execution and display an error.
+
+This is useful because it prevents us from proceeding with an incomplete administrative map.
+
+### Let's preview our six administrative divisions!
+
+Before adding colours and labels, let's visualise the administrative boundaries.
+
+```{r preview-gorontalo-regencies}
+
+# Let's preview the administrative boundaries!
+ggplot() +
+  geom_sf(
+    data = gorontalo_regencies,
+    fill = "lightblue",
+    color = "white",
+    linewidth = 0.6
+  ) +
+  geom_sf(
+    data = gorontalo_province,
+    fill = NA,
+    color = "grey20",
+    linewidth = 0.8
+  ) +
+  labs(
+    title = "Administrative Divisions of Gorontalo Province",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  theme_minimal()
+
+```
+
+**Understanding our code**
+
+We use two `geom_sf()` layers:
+
+1. The first layer draws the boundaries of Gorontalo's regencies and city.
+2. The second layer adds the provincial outline.
+
+The `fill = NA` argument makes the provincial layer transparent, allowing the internal administrative boundaries to remain visible.
+
+At this stage, all six administrative divisions share the same fill colour. We will assign different colours in a later step.
+
+## What have we learned?
+
+In this step, we have learned how to:
+
+1. Identify a province using its administrative code.
+2. Filter spatial data using `dplyr`.
+3. Extract administrative divisions from a larger dataset.
+4. Verify the completeness of our extracted data.
+5. Visualise administrative boundaries using multiple `geom_sf()` layers.
+
+We now have a spatial object called `gorontalo_regencies`, containing the six administrative divisions of Gorontalo Province.
+
+Next, let's prepare English names for our administrative map!
+
+
+# Translating Administrative Division Names into English
+
+Now that we have extracted Gorontalo's five regencies and one city, let's prepare their names for our English-language map!
+
+Our spatial dataset uses Indonesian administrative names. For academic presentation, we will create a new variable containing their English equivalents while preserving the original names.
+
+## Let's inspect the original administrative names!
+
+Before translating the names, let's examine how they are recorded in our dataset.
+
+```{r inspect-gorontalo-names}
+
+# Let's inspect the original names!
+gorontalo_regencies %>%
+  st_drop_geometry() %>%
+  select(nama_kabupaten, tipe) %>%
+  print()
+
+```
+
+**Understanding our code**
+
+We use `st_drop_geometry()` to temporarily exclude geographic shapes from the displayed table.
+
+The `select()` function allows us to focus on two variables:
+
+- `nama_kabupaten`: The original administrative name.
+- `tipe`: The administrative division type.
+
+Some names may include prefixes such as *Kabupaten* or *Kota*. We need to account for these differences when creating our English labels.
+
+## Let's translate the administrative names!
+
+We will use `mutate()` and `case_when()` to create a new variable called `region_english`.
+
+```{r translate-gorontalo}
+
+# Let's create our English labels!
+gorontalo_regencies <- gorontalo_regencies %>%
+  mutate(
+    region_english = case_when(
+      grepl("Gorontalo Utara", nama_kabupaten) ~ "Gorontalo Utara Regency",
+      grepl("Bone Bolango", nama_kabupaten) ~ "Bone Bolango Regency",
+      grepl("Boalemo", nama_kabupaten) ~ "Boalemo Regency",
+      grepl("Pohuwato", nama_kabupaten) ~ "Pohuwato Regency",
+      grepl("Kota Gorontalo", nama_kabupaten) ~ "Gorontalo City",
+      grepl("Gorontalo", nama_kabupaten) ~ "Gorontalo Regency",
+      TRUE ~ NA_character_
+    )
+  )
+
+```
+
+**Understanding our code**
+
+Let's look at the three main functions:
+
+| Function | What does it do? |
+|:---------|:-----------------|
+| `mutate()` | Creates or modifies variables |
+| `case_when()` | Assigns values based on multiple conditions |
+| `grepl()` | Checks whether a text pattern appears in a string |
+
+For example:
+
+```r
+grepl("Bone Bolango", nama_kabupaten)
+```
+
+This checks whether the name contains `"Bone Bolango"`, even if it is written as `"Kabupaten Bone Bolango"`.
+
+**Why does the order matter?**
+
+The conditions in `case_when()` are evaluated from top to bottom.
+
+For example, `"Gorontalo Utara"` must appear before the more general `"Gorontalo"` condition. Otherwise, North Gorontalo could be incorrectly labelled as Gorontalo Regency.
+
+## Let's compare the Indonesian and English names!
+
+Now, let's compare the original names with their English equivalents.
+
+```{r compare-gorontalo-names}
+
+# Let's compare our administrative names!
+gorontalo_names <- gorontalo_regencies %>%
+  st_drop_geometry() %>%
+  select(nama_kabupaten, tipe, region_english)
+
+print(gorontalo_names)
+
+```
+
+**What should we expect?**
+
+Our dataset should now contain the following English labels:
+
+| Indonesian administrative name | English label |
+|:-------------------------------|:--------------|
+| Kabupaten Boalemo | Boalemo Regency |
+| Kabupaten Bone Bolango | Bone Bolango Regency |
+| Kabupaten Gorontalo | Gorontalo Regency |
+| Kabupaten Gorontalo Utara | Gorontalo Utara Regency |
+| Kabupaten Pohuwato | Pohuwato Regency |
+| Kota Gorontalo | Gorontalo City |
+
+We have retained *Gorontalo Utara* as a geographic name while translating its administrative designation into *Regency*.
+
+## Let's verify our translations!
+
+Before proceeding, let's ensure that all six administrative divisions have valid English labels.
+
+```{r verify-gorontalo-names}
+
+# Let's check for missing translations!
+sum(is.na(gorontalo_regencies$region_english))
+
+# Let's check for unique English names!
+length(unique(gorontalo_regencies$region_english))
+
+# Let's validate our labels!
+stopifnot(
+  !anyNA(gorontalo_regencies$region_english),
+  dplyr::n_distinct(gorontalo_regencies$region_english) == 6
+)
+
+```
+
+**What should we expect?**
+
+The first two commands should return:
+
+```text
+[1] 0
+[1] 6
+```
+
+This means:
+
+- `0`: No administrative divisions are missing an English label.
+- `6`: All six administrative divisions have distinct labels.
+
+The `stopifnot()` function ensures that our data meet both conditions before we proceed.
+
+## What have we learned?
+
+In this step, we have learned how to:
+
+1. Inspect administrative names in a spatial dataset.
+2. Create a new variable using `mutate()`.
+3. Translate names using `case_when()` and `grepl()`.
+4. Preserve original Indonesian names alongside English labels.
+5. Validate the completeness and uniqueness of our translations.
+
+Our spatial object, `gorontalo_regencies`, now contains the variable `region_english`, which we will use for map colours, labels, and legends.
+
+Next, let's visualise Gorontalo's six administrative divisions using different colours!
+
+# Visualising Administrative Divisions of Gorontalo Province
+
+Now that we have prepared the English administrative names, let's start creating our map!
+
+In this step, we will use `ggplot2` to visualise Gorontalo's five regencies and one city. Each administrative division will be represented by a different colour, making it easier to distinguish their geographic boundaries.
+
+## Let's create our first administrative map!
+
+We will begin by combining our spatial data with `ggplot2`.
+
+```{r visualise-gorontalo}
+
+# Let's create our administrative map!
+gorontalo_map <- ggplot() +
+  geom_sf(
+    data = gorontalo_regencies,
+    aes(fill = region_english),
+    color = "white",
+    linewidth = 0.5
+  ) +
+  geom_sf(
+    data = gorontalo_province,
+    fill = NA,
+    color = "grey20",
+    linewidth = 0.8
+  ) +
+  coord_sf(expand = FALSE) +
+  scale_fill_manual(
+    values = setNames(
+      rainbow(6),
+      sort(unique(gorontalo_regencies$region_english))
+    )
+  ) +
+  labs(
+    title = "Administrative Map of Gorontalo Province",
+    fill = "Administrative Division",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  theme_minimal()
+
+# Let's see our map!
+print(gorontalo_map)
+
+```
+
+**What should we expect?**
+
+Our map should display six administrative divisions, each with a different colour.
+
+The provincial boundary should appear as a darker outline, while the internal boundaries between regencies and the city should appear in white.
+
+A legend on the right identifies the six administrative divisions using their English names.
+
+### Understanding our map layers
+
+Let's explore how `ggplot2` builds our map.
+
+Unlike a single image, a `ggplot2` visualisation consists of multiple layers that can be added or modified independently.
+
+| Function | Purpose |
+|:---------|:--------|
+| `ggplot()` | Initialises the map |
+| `geom_sf()` | Draws geographic features |
+| `aes(fill = region_english)` | Assigns colours based on administrative names |
+| `coord_sf()` | Handles spatial coordinates |
+| `scale_fill_manual()` | Defines the map's colour palette |
+| `labs()` | Adds titles and axis labels |
+| `theme_minimal()` | Applies a clean visual theme |
+
+The `+` operator connects these components into a single visualisation.
+
+## Let's understand our geographic layers!
+
+Our map contains two `geom_sf()` layers.
+
+**First layer: Administrative divisions**
+
+```r
+geom_sf(
+  data = gorontalo_regencies,
+  aes(fill = region_english),
+  color = "white",
+  linewidth = 0.5
+)
+```
+
+This layer draws the five regencies and one city.
+
+The `fill` aesthetic assigns different colours based on `region_english`, while `color` and `linewidth` control the administrative boundaries.
+
+**Second layer: Provincial boundary**
+
+```r
+geom_sf(
+  data = gorontalo_province,
+  fill = NA,
+  color = "grey20",
+  linewidth = 0.8
+)
+```
+
+This layer draws the provincial outline.
+
+Setting `fill = NA` makes the layer transparent, allowing the administrative divisions underneath to remain visible.
+
+The provincial outline is slightly thicker than the internal boundaries to distinguish the two administrative levels.
+
+## Let's explore our colour palette!
+
+For our initial map, we use the `rainbow()` function to generate six different colours.
+
+```{r explore-gorontalo-colours}
+
+# Let's generate six colours!
+rainbow(6)
+
+# Let's preview our colour palette!
+barplot(
+  rep(1, 6),
+  col = rainbow(6),
+  border = NA,
+  main = "Our Initial Colour Palette",
+  names.arg = 1:6
+)
+
+```
+
+**Understanding our code**
+
+- `rainbow(6)` generates six colours.
+- `rep(1, 6)` creates six bars of equal height.
+- `barplot()` displays the colours.
+- `col` controls the fill colours.
+- `border = NA` removes the bar outlines.
+
+In our map, `setNames()` associates these colours with the six administrative names.
+
+We also use `sort()` to keep the names in a consistent order.
+
+This is our starting palette. Later, we will replace it with more distinguishable colours for our final academic map.
+
+## Let's understand our map coordinates!
+
+Our map uses:
+
+```r
+coord_sf(expand = FALSE)
+```
+
+The `coord_sf()` function manages the geographic coordinate system used by `ggplot2`.
+
+Setting `expand = FALSE` removes the default expansion around the plotting area, producing a tighter map layout.
+
+We also use:
+
+```r
+labs(
+  x = "Longitude",
+  y = "Latitude"
+)
+```
+
+These labels describe the geographic axes when the map is displayed using longitude and latitude coordinates.
+
+## What have we learned?
+
+In this step, we have learned how to:
+
+1. Create an administrative map using `ggplot2`.
+2. Draw geographic boundaries using `geom_sf()`.
+3. Assign different colours to administrative divisions.
+4. Combine multiple spatial layers.
+5. Customise map titles, axes, and legends.
+6. Explore colour palettes using R.
+
+We now have our first coloured administrative map of Gorontalo Province!
+
+Our map already displays the six administrative divisions, but their names are only visible in the legend.
+
+Next, let's add the administrative names directly to the map!
+
+
+# Adding Administrative Labels to Our Map
+
+Our map now displays Gorontalo's five regencies and one city in different colours. However, readers still need to look at the legend to identify each administrative division.
+
+Let's make our map more informative by adding the administrative names directly to their geographic locations!
+
+## Let's find suitable label positions!
+
+Before adding labels, we need to determine where each administrative name should appear.
+
+We will use `st_point_on_surface()` from the `sf` package to generate a point within each administrative division.
+
+However, geographic coordinates are usually expressed in longitude and latitude.
+But wait......! do you know how to calculate label positions more appropriately?
+To execute this, we will first transform our spatial data into a projected coordinate reference system.
+
+```{r calculate-gorontalo-labels}
+
+# Let's calculate our label positions!
+gorontalo_labels <- gorontalo_regencies %>%
+  st_transform(32651) %>%
+  st_point_on_surface() %>%
+  st_transform(4326)
+
+# Let's inspect our label points!
+print(gorontalo_labels)
+
+```
+
+**Understanding our code**
+
+| Function | What does it do? |
+|:---------|:-----------------|
+| `st_transform(32651)` | Projects the data into UTM Zone 51N |
+| `st_point_on_surface()` | Generates a point within each geographic feature |
+| `st_transform(4326)` | Converts the coordinates back to WGS84 longitude and latitude |
+
+**Why do we transform our coordinates?**
+
+Longitude and latitude are angular measurements expressed in degrees, rather than linear distances.
+
+Some spatial operations are better performed using a projected coordinate reference system, where coordinates are expressed in metres.
+
+Note that, Gorontalo is located within UTM Zone 51N, represented by EPSG:32651.
+
+By transforming our data before calculating label positions, we can avoid the warning associated with applying `st_point_on_surface()` directly to longitude/latitude coordinates.
+
+## Let's visualise our label positions!
+
+Before adding administrative names, let's see where our label points are located.
+
+```{r preview-gorontalo-label-points}
+
+# Let's preview our label positions!
+ggplot() +
+  geom_sf(
+    data = gorontalo_regencies,
+    fill = "lightblue",
+    color = "white",
+    linewidth = 0.5
+  ) +
+  geom_sf(
+    data = gorontalo_labels,
+    color = "red",
+    size = 2.5
+  ) +
+  labs(
+    title = "Administrative Label Positions",
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  theme_minimal()
+
+```
+
+**What should we expect?**
+
+Our map should display six red points, each located within one of Gorontalo's administrative divisions.
+
+These points will serve as reference positions for our administrative labels.
+
+**Understanding our code**
+
+We have combined two spatial layers:
+
+1. `gorontalo_regencies` displays the administrative boundaries.
+2. `gorontalo_labels` displays the calculated label positions.
+
+Notice that `geom_sf()` can visualise both polygon features and point features.
+
+## Let's add our administrative names!
+
+Now that we have calculated the label positions, let's add the English administrative names directly to our coloured map.
+
+We will use our friends... Who are they??
+Yups they are `geom_sf_text()` from `ggplot2`. See below how they archive it!
+
+```{r add-gorontalo-labels}
+
+# Let's add our administrative labels!
+gorontalo_map_labelled <- gorontalo_map +
+  geom_sf_text(
+    data = gorontalo_labels,
+    aes(label = region_english),
+    size = 3,
+    fontface = "bold",
+    color = "black",
+    check_overlap = TRUE
+  )
+
+# Let's see our labelled map!
+print(gorontalo_map_labelled)
+
+```
+
+**Understanding our code**
+
+| Argument | Purpose |
+|:---------|:--------|
+| `geom_sf_text()` | Adds text labels using spatial coordinates |
+| `aes(label = region_english)` | Uses our English administrative names |
+| `size = 3` | Controls the text size |
+| `fontface = "bold"` | Displays labels in bold |
+| `color = "black"` | Sets the label colour |
+| `check_overlap = TRUE` | Suppresses some overlapping labels |
+
+**What should we expect?**
+
+Our map should now display administrative names directly over the geographic regions.
+
+However, some labels may overlap or disappear, particularly in smaller administrative areas such as Gorontalo City.
+
+This happens because geographic regions vary considerably in size and shape.
+
+## Let's understand the limitations of our labels!
+
+Although `geom_sf_text()` is useful for adding geographic labels, it has some limitations.
+
+For example:
+
+- Long administrative names may extend beyond their geographic boundaries.
+- Labels may overlap in densely packed regions.
+- Smaller administrative divisions may not have enough space for their names.
+- `check_overlap = TRUE` may suppress labels rather than reposition them.
+
+These issues do not necessarily indicate errors in our geographic data. 
+Instead, they reflect the challenges of placing text within irregular geographic shapes.
+
+To improve our map, we will later use `ggrepel`
+Doing so will help us reposition labels and draw connecting lines to their geographic locations.
+
+## What have we learned?
+
+In this step, we have learned how to:
+
+1. Calculate label positions using `st_point_on_surface()`.
+2. Transform spatial coordinates between reference systems.
+3. Visualise geographic points using `geom_sf()`.
+4. Add administrative names using `geom_sf_text()`.
+5. Identify limitations in automatic geographic labelling.
+
+Our map now contains both administrative boundaries and geographic labels!
+
+Next, let's improve our English-labelled map using `ggrepel` to make the administrative names easier to read.
+
+# Improving Label Placement with `ggrepel`
+
+Our map now displays the English names of Gorontalo's administrative divisions. However, some labels may overlap or extend beyond their geographic boundaries.
+
+Let's improve their placement using the `ggrepel` package!
+
+Unlike `geom_sf_text()`, which places labels at specified geographic coordinates, `ggrepel` can move labels away from one another to reduce overlaps.
+
+## Let's extract the label coordinates!
+
+In Step 7, we created `gorontalo_labels`, an `sf` object containing one point for each administrative division.
+
+To use these points with `ggrepel`, we need to extract their longitude and latitude coordinates.
+
+```{r extract-gorontalo-label-coordinates}
+# Let's extract our label coordinates!
+label_coordinates <- st_coordinates(gorontalo_labels)
+
+# Let's add longitude and latitude!
+gorontalo_labels <- gorontalo_labels %>%
+  mutate(
+    longitude = label_coordinates[, 1],
+    latitude = label_coordinates[, 2]
+  )
+
+# Let's inspect our label coordinates!
+gorontalo_labels %>%
+  st_drop_geometry() %>%
+  select(region_english, longitude, latitude)
+```
+
+**Understanding our code**
+
+| Function or expression | Purpose |
+|:-----------------------|:--------|
+| `st_coordinates()` | Extracts numeric coordinates from spatial points |
+| `label_coordinates[, 1]` | Extracts the first coordinate (longitude) |
+| `label_coordinates[, 2]` | Extracts the second coordinate (latitude) |
+| `mutate()` | Adds the coordinates as new variables |
+| `st_drop_geometry()` | Displays the attribute data without the geometry column |
+
+**Why do we need numeric coordinates?**
+
+In Step 7, `geom_sf_text()` could use the geometry column directly.
+
+However, `geom_text_repel()` requires explicit `x` and `y` coordinates.
+
+By creating `longitude` and `latitude`, we can use our geographic label positions with `ggrepel`.
+
+## Let's add repelled labels to our map!
+
+Now, let's use `geom_text_repel()` to create a map with more flexible label placement.
+
+```{r gorontalo-map-repelled-labels}
+# Let's improve our administrative labels!
+gorontalo_map_repelled <- gorontalo_map +
+  ggrepel::geom_text_repel(
+    data = gorontalo_labels,
+    aes(
+      x = longitude,
+      y = latitude,
+      label = region_english
+    ),
+    size = 3.5,
+    fontface = "bold",
+    box.padding = 0.6,
+    point.padding = 0.3,
+    force = 3,
+    max.overlaps = Inf,
+    max.iter = 20000,
+    min.segment.length = 0,
+    segment.color = "grey40",
+    segment.size = 0.3,
+    seed = 123
+  )
+
+# Let's see our improved map!
+print(gorontalo_map_repelled)
+```
+
+**What should we expect?**
+
+Our map should display all six administrative names, with some labels moved away from their original geographic positions to reduce overlaps.
+
+Thin connecting lines may appear between displaced labels and their corresponding geographic locations.
+
+The exact positions may differ depending on the plot dimensions and available space.
+
+## 8.3. Let's Understand the `ggrepel` Arguments!
+
+The `geom_text_repel()` function provides several options for controlling label placement.
+
+| Argument | Purpose |
+|:---------|:--------|
+| `x`, `y` | Specify the original geographic label positions |
+| `label` | Specifies the text to display |
+| `box.padding` | Controls spacing around each label |
+| `point.padding` | Controls spacing around the original anchor point |
+| `force` | Controls the strength of label repulsion |
+| `max.overlaps = Inf` | Prevents labels from being excluded by the overlap threshold |
+| `max.iter` | Sets the maximum number of iterations used to find suitable positions |
+| `min.segment.length = 0` | Allows connecting segments even when they are short |
+| `segment.color` | Controls the colour of connecting lines |
+| `segment.size` | Controls the thickness of connecting lines |
+| `seed` | Helps make label placement reproducible |
+
+**Why do we use `seed = 123`?**
+
+The label placement algorithm can involve random initialisation.
+
+Setting a seed helps us obtain consistent results when regenerating the map under the same conditions.
+
+This is particularly useful when preparing figures for academic reports or publications.
+
+## Let's compare our labelling methods!
+
+We have now used two approaches to add administrative names to our map.
+
+| Feature | `geom_sf_text()` | `geom_text_repel()` |
+|:--------|:-----------------|:--------------------|
+| Uses `sf` geometry directly | Yes | No |
+| Requires separate `x` and `y` coordinates | No | Yes |
+| Automatically repositions labels | No | Yes |
+| Can draw connecting lines | No | Yes |
+| Useful for crowded maps | Limited | Generally better |
+
+Both approaches are useful, but they serve different purposes.
+
+`geom_sf_text()` is convenient when labels fit comfortably within their geographic regions.
+
+`geom_text_repel()` is particularly helpful when administrative divisions are small, irregularly shaped, or located close together.
+
+## Let's reflect on our map design!
+
+Although `ggrepel` improves label placement, it does not guarantee that every label will remain within its administrative boundary.
+
+This is because its main objective is to reduce overlaps between labels and other specified elements, rather than constrain text to geographic polygons.
+
+For a map such as Gorontalo, this can be useful. 
+Why......?
+Simply, it's because long names, like "Gorontalo Utara Regency" and "Bone Bolango Regency", may be easier to read when positioned outside their original anchor points.
+
+However, we should still visually inspect our map before exporting it.
+
+## What have we learned?
+
+In this step, we have learned how to:
+
+1. Extract numeric coordinates from spatial point features.
+2. Add longitude and latitude variables to an `sf` object.
+3. Use `geom_text_repel()` to reduce overlapping labels.
+4. Customise label spacing and connecting lines.
+5. Improve the reproducibility of label placement.
+6. Evaluate the readability of an administrative map.
+
+We now have an improved map called `gorontalo_map_repelled`.
+It contain all six administrative divisions with more flexible label placement.
+
+Next, let's refine our map's colours, geographic extent, and overall appearance to create a publication-ready figure!
+
+# Refining Our Map for Academic Presentation
+
+Our administrative map is almost complete!
+
+We have successfully visualised Gorontalo's five regencies and one city
+We have translated their names into English, and improved label placement using `ggrepel`.
+
+Now, let's refine the colours, geographic extent, and visual appearance of our map.
+
+Our goal is to create a clear and professional map suitable for academic presentation.
+
+## Let's create a custom colour palette!
+
+In Step 6, we used `rainbow()` to assign six colours automatically.
+
+Although this was useful for learning how colour scales work, we can improve our map by selecting colours individually.
+
+Let's create a named colour palette for Gorontalo's administrative divisions!
+
+```{r gorontalo-custom-colours}
+
+# Let's define our custom colours!
+region_colours <- c(
+  "Boalemo Regency" = "#D55E00",
+  "Bone Bolango Regency" = "#E6AB02",
+  "Gorontalo City" = "#CC79A7",
+  "Gorontalo Regency" = "#009E73",
+  "Gorontalo Utara Regency" = "#0072B2",
+  "Pohuwato Regency" = "#88BDE6"
+)
+
+# Let's inspect our colours!
+print(region_colours)
+
+```
+
+**Understanding our code**
+
+We use `c()` to create a named vector containing six hexadecimal colour codes.
+
+Each colour is associated with a specific administrative division.
+
+| Administrative division | Colour code |
+|:------------------------|:------------|
+| Boalemo Regency | `#D55E00` |
+| Bone Bolango Regency | `#E6AB02` |
+| Gorontalo City | `#CC79A7` |
+| Gorontalo Regency | `#009E73` |
+| Gorontalo Utara Regency | `#0072B2` |
+| Pohuwato Regency | `#88BDE6` |
+
+Using a named vector is particularly useful because `ggplot2` can match colours to administrative names rather than relying on their order in the dataset.
+
+## Let's preview our colour palette!
+
+Before applying the colours to our map, let's visualise them.
+
+```{r preview-gorontalo-custom-colours}
+
+# Let's preview our custom colour palette!
+barplot(
+  rep(1, length(region_colours)),
+  col = region_colours,
+  border = NA,
+  names.arg = names(region_colours),
+  las = 2,
+  cex.names = 0.7,
+  main = "Gorontalo Administrative Colour Palette"
+)
+
+```
+
+**What should we expect?**
+
+The plot should display six coloured bars representing our administrative divisions.
+
+Each bar has the same height because we are visualising categorical colours rather than numerical values.
+
+**Understanding our code**
+
+- `length(region_colours)` counts the colours.
+- `rep()` creates equal-height bars.
+- `col` applies our custom colours.
+- `names.arg` adds administrative names.
+- `las = 2` rotates the labels vertically.
+- `cex.names` adjusts their text size.
+
+This simple preview helps us examine the palette before applying it to our geographic map.
+
+## Let's create our refined administrative map!
+
+Now, let's combine everything we have learned into one map.
+
+We will use our custom colours, improved labels, and a more focused geographic extent.
+
+```{r refine-gorontalo-map}
+
+# Let's create our refined administrative map!
+gorontalo_map_final <- ggplot() +
+  geom_sf(
+    data = gorontalo_regencies,
+    aes(fill = region_english),
+    color = "white",
+    linewidth = 0.5
+  ) +
+  geom_sf(
+    data = gorontalo_province,
+    fill = NA,
+    color = "grey20",
+    linewidth = 0.8
+  ) +
+  geom_sf(
+    data = gorontalo_labels,
+    shape = 21,
+    fill = "white",
+    color = "black",
+    size = 2.5,
+    stroke = 0.8
+  ) +
+  ggrepel::geom_text_repel(
+    data = gorontalo_labels,
+    aes(
+      x = longitude,
+      y = latitude,
+      label = region_english
+    ),
+    size = 3.5,
+    fontface = "bold",
+    box.padding = 0.6,
+    point.padding = 0.3,
+    force = 3,
+    max.overlaps = Inf,
+    max.iter = 20000,
+    min.segment.length = 0,
+    segment.color = "black",
+    segment.size = 0.6,
+    seed = 123
+  ) +
+  scale_fill_manual(
+    values = region_colours
+  ) +
+  coord_sf(
+    xlim = c(121, 124),
+    ylim = c(0.15, 1.25),
+    expand = FALSE,
+    clip = "off"
+  ) +
+  labs(
+    title = "Administrative Map of Gorontalo Province",
+    fill = "Administrative Division",
+    x = "Longitude",
+    y = "Latitude",
+    caption = "Administrative boundaries: BIG, via wilayah-id"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 17
+    ),
+    plot.title.position = "plot",
+    legend.position = "none",
+    panel.grid.major = element_line(
+      color = "grey90",
+      linewidth = 0.3
+    ),
+    plot.margin = margin(15, 35, 15, 15)
+  )
+
+# Let's see our final map!
+print(gorontalo_map_final)
+
+```
+
+**What should we expect?**
+
+Our refined map should display:
+
+1. Six administrative divisions with distinct colours.
+2. A dark provincial outline and white internal boundaries.
+3. English administrative names positioned using `ggrepel`.
+4. Longitude and latitude axes.
+5. A clear title and a data-source caption.
+6. No separate legend, since the names already appear directly on the map.
+
+## Let's understand our geographic extent!
+
+In our refined map, we use:
+
+```r
+coord_sf(
+  xlim = c(121, 124),
+  ylim = c(0.15, 1.25),
+  expand = FALSE,
+  clip = "off"
+)
+```
+
+The `coord_sf()` function controls how our geographic data are displayed.
+
+| Argument | Purpose |
+|:---------|:--------|
+| `xlim` | Specifies the longitude limits |
+| `ylim` | Specifies the latitude limits |
+| `expand = FALSE` | Removes automatic padding around the map |
+| `clip = "off"` | Allows graphical elements to extend beyond the plotting panel |
+
+**Why do we specify coordinate limits?**
+
+By defining the geographic extent, we can focus the map on Gorontalo Province rather than displaying unnecessary surrounding space.
+
+The `clip = "off"` argument is also useful when some administrative labels extend beyond the plotting panel.
+
+However, we should still inspect the exported figure to ensure that labels are not cut off at the edges of the image.
+
+## Let's understand our map theme!
+
+We use `theme_minimal()` as the foundation of our map design.
+
+Then, we customise several elements using `theme()`.
+
+**Map title**
+
+```r
+plot.title = element_text(
+  face = "bold",
+  size = 17
+)
+```
+
+This makes our title more prominent.
+
+**Legend**
+
+```r
+legend.position = "none"
+```
+
+This removes the legend.
+
+Since the administrative names already appear directly on the map, removing the legend helps reduce visual redundancy.
+
+**Grid lines**
+
+```r
+panel.grid.major = element_line(
+  color = "grey90",
+  linewidth = 0.3
+)
+```
+
+This creates subtle geographic grid lines without drawing too much attention away from the administrative boundaries.
+
+**Plot margins**
+
+```r
+plot.margin = margin(15, 35, 15, 15)
+```
+
+This adjusts the space around the figure, providing additional room for titles and labels.
+
+## Let's check our final map!
+
+Before exporting our map, let's confirm that our colour palette includes all six administrative divisions.
+
+```{r validate-gorontalo-final-map}
+
+# Let's verify our administrative colours!
+setequal(
+  unique(gorontalo_regencies$region_english),
+  names(region_colours)
+)
+
+# Let's confirm that our final map exists!
+class(gorontalo_map_final)
+
+```
+
+**What should we expect?**
+
+The first command should return:
+
+```text
+[1] TRUE
+```
+
+This confirms that the administrative names in our spatial dataset match the names in our colour palette.
+
+The second command should identify our map as a `ggplot` object.
+
+## What have we learned?
+
+In this step, we have learned how to:
+
+1. Create a custom colour palette using hexadecimal colour codes.
+2. Assign colours consistently using a named vector.
+3. Refine geographic boundaries and administrative labels.
+4. Adjust the geographic extent using `coord_sf()`.
+5. Customise map titles, grid lines, margins, and legends.
+6. Validate the relationship between administrative names and map colours.
+
+We now have our refined administrative map, stored as `gorontalo_map_final`.
+
+Next, let's export our map as high-resolution PNG and PDF files for academic use!
+
+# Exporting Our Map as High-Resolution PNG and PDF
+
+Congratulations! We have successfully created our administrative map of Gorontalo Province.
+
+Our final map includes six administrative divisions, English labels, custom colours, and a refined layout.
+
+Now, let's save our map so we can use it outside RStudio.
+
+## Let's export our map as a PNG file!
+
+First, we will save our map as a high-resolution PNG image using `ggsave()`.
+
+```{r export-gorontalo-png}
+# Let's export our map as a high-resolution PNG!
+ggsave(
+  filename = "Map_of_Gorontalo.png",
+  plot = gorontalo_map_final,
+  width = 12,
+  height = 5,
+  units = "in",
+  dpi = 600,
+  bg = "white"
+)
+```
+
+**Understanding our code**
+
+The `ggsave()` function allows us to save a `ggplot2` visualisation as an external file.
+
+| Argument | Purpose |
+|:---------|:--------|
+| `filename` | Specifies the output file name and format |
+| `plot` | Identifies the plot to export |
+| `width` | Sets the figure width |
+| `height` | Sets the figure height |
+| `units` | Specifies the measurement units |
+| `dpi` | Sets the raster image resolution |
+| `bg` | Sets the background colour |
+
+**Why do we use 600 dpi?**
+
+DPI stands for *dots per inch*. For raster images, the resolution setting determines how many pixels are generated per inch.
+
+A higher resolution generally produces sharper text, boundaries, and other visual details when the image is displayed or printed at its intended size.
+
+Our PNG file uses:
+
+- Width: 12 inches
+- Height: 5 inches
+- Resolution: 600 dpi
+
+This produces an image measuring approximately **7200 × 3000 pixels**.
+
+Such a resolution is useful when preparing figures for academic publications, although individual journals may specify different requirements.
+
+## Let's export our map as a PDF file!
+
+Next, let's save our map as a PDF.
+
+```{r export-gorontalo-pdf}
+# Let's export our map as a PDF!
+ggsave(
+  filename = "Map_of_Gorontalo.pdf",
+  plot = gorontalo_map_final,
+  width = 14,
+  height = 7,
+  units = "in",
+  bg = "white"
+)
+```
+
+**Why do we also need a PDF?**
+
+Unlike PNG images, PDF files can preserve vector graphics.
+
+Vector graphics represent lines and shapes mathematically rather than as a fixed grid of pixels.
+
+This means that geographic boundaries and text can generally be enlarged without losing sharpness.
+
+PDF is therefore particularly useful for:
+
+- Academic publications
+- Thesis figures
+- Posters
+- High-quality printing
+
+Notice that we do not specify `dpi` for this PDF export. The resolution setting is primarily relevant to raster graphics, while vector elements remain scalable.
+
+## Let's compare PNG and PDF formats!
+
+Both formats are useful, but they serve different purposes.
+
+| Feature | PNG | PDF |
+|:--------|:----|:----|
+| Graphic type | Raster | Supports vector graphics |
+| Resolution | Pixel-based | Vector elements are scalable |
+| Easy to insert into slides | Yes | Depends on software |
+| Suitable for academic publications | Yes | Yes |
+| Best for | Images and presentations | Printing and scalable figures |
+
+**Which format should we use?**
+
+PNG is convenient when inserting a map into presentation slides, documents, or online materials.
+
+PDF is useful when preserving scalable lines, text, and geographic boundaries.
+
+For academic work, it is often helpful to keep both formats available.
+
+## Let's check whether our files were saved!
+
+After exporting our map, let's verify that both files exist.
+
+```{r verify-gorontalo-exports}
+
+# Let's check our exported files!
+file.exists("Map_of_Gorontalo.png")
+file.exists("Map_of_Gorontalo.pdf")
+
+# Let's locate our working directory!
+getwd()
+
+```
+
+**What should we expect?**
+
+If both exports were successful, the first two commands should return:
+
+```text
+[1] TRUE
+[1] TRUE
+```
+
+The `getwd()` function displays the current working directory.
+
+By default, our exported files are saved relative to this directory because we have not specified another folder.
+
+**Note:** When knitting an R Markdown document, the working directory may differ from the directory used during an interactive RStudio session. We should check the output location if our files do not appear where expected.
+
+## Let's inspect our exported files!
+
+We can also inspect the file sizes to confirm that our outputs were created.
+
+```{r inspect-gorontalo-exports}
+
+# Let's inspect our exported files!
+file.info(
+  c(
+    "Map_of_Gorontalo.png",
+    "Map_of_Gorontalo.pdf"
+  )
+)[, c("size", "mtime")]
+
+```
+
+**Understanding our code**
+
+- `file.info()` retrieves information about the exported files.
+- `size` reports file size in bytes.
+- `mtime` reports the most recent modification time.
+
+This is useful when checking whether our files were generated or updated during the latest execution.
+
+## What have we learned?
+
+In this step, we have learned how to:
+
+1. Export a `ggplot2` map using `ggsave()`.
+2. Save high-resolution PNG images.
+3. Export scalable PDF graphics.
+4. Understand the differences between raster and vector formats.
+5. Check whether exported files exist.
+6. Inspect file information and output locations.
+
+We have now successfully created and exported our administrative map of Gorontalo Province!
+
+---
+
+# Wrapping Up
+
+Congratulations! We have reached the end of our journey in mapping Gorontalo Province using R!
+
+What started with retrieving geographic data has now become a complete administrative map showing Gorontalo's five regencies and one city.
+
+Along the way, we have explored how spatial data work, learned to manipulate geographic features, and discovered how different R packages can help us transform geographic information into meaningful visualisations.
+
+But before we finish, let's reflect on what we have accomplished!
+
+## What Have We Accomplished?
+
+Throughout this tutorial, we have completed ten important steps:
+
+1. **Preparing our R environment:** We loaded the packages required for spatial data processing and visualisation.
+2. **Retrieving provincial boundaries:** We obtained Indonesia's provincial geographic data and extracted Gorontalo Province.
+3. **Retrieving administrative divisions:** We accessed geographic boundaries at the regency and city levels.
+4. **Extracting Gorontalo's administrative divisions:** We identified its five regencies and one city using administrative codes.
+5. **Translating administrative names:** We created English labels while preserving the original Indonesian names.
+6. **Creating our first administrative map:** We visualised geographic boundaries using `ggplot2`.
+7. **Adding geographic labels:** We calculated label positions using spatial operations and coordinate transformations.
+8. **Improving label placement:** We used `ggrepel` to make administrative names easier to read.
+9. **Refining our map:** We customised colours, geographic extent, and visual appearance.
+10. **Exporting our final map:** We saved our map as high-resolution PNG and PDF files.
+
+More importantly, we have learned how several R packages work together:
+
+| Package | What Have We Learned? |
+|:--------|:----------------------|
+| `sf` | How to retrieve, manage, transform, and visualise spatial data |
+| `dplyr` | How to filter, select, and manipulate geographic attributes |
+| `ggplot2` | How to construct and customise geographic visualisations |
+| `ggrepel` | How to improve the readability of geographic labels |
+
+By combining these tools, we have developed a reproducible workflow for creating administrative maps.
+
+## Let's Look at Our Final Outputs!
+
+We have produced two versions of our administrative map:
+
+- **`Map_of_Gorontalo.png`** — A high-resolution image suitable for presentations, reports, and other visual materials.
+- **`Map_of_Gorontalo.pdf`** — A scalable graphic suitable for academic publications and high-quality printing.
+
+Both files represent the same geographic information, but they offer different advantages depending on how we intend to use our map.
+
+Our final map illustrates the six administrative divisions of Gorontalo Province using distinct colours and English labels.
+
+And that's our final product!
+
+## Where to from Here?
+
+So, have we finished learning about geographic mapping in R?
+
+Not quite! In fact, we have only scratched the surface.
+
+Now that we understand the basic workflow, there are many exciting directions we can explore.
+
+**What if we wanted to map another Indonesian province?**
+
+We could adapt our existing code by changing the province selected during data filtering.
+
+**What if we wanted to explore population distribution?**
+
+We could use demographic attributes to create a choropleth map, where colours represent numerical values such as population size or density.
+
+**What if we wanted to map languages and their geographic distribution?**
+
+We could combine administrative boundaries with linguistic data to visualise where particular languages or language varieties are spoken.
+
+This could be especially useful for research in sociolinguistics, language documentation, and language maintenance.
+
+**And what if we wanted to make our map interactive?**
+
+We could explore additional R packages, such as `leaflet`, to create interactive maps that allow users to zoom, navigate, and explore geographic information.
+
+The possibilities extend far beyond the administrative map we have created here!
+
+## A Final Thought
+
+Creating a map is not simply about drawing geographic boundaries.
+
+It is also about understanding how geographic information is organised, represented, analysed, and communicated.
+
+Throughout this tutorial, we have seen how a few lines of R code can gradually develop into a detailed geographic visualisation.
+
+We have also learned that effective mapping involves more than writing code. It requires careful data selection, coordinate management, thoughtful design, and attention to readability.
+
+Most importantly, we now have a foundation that we can build upon for future spatial research.
+
+<div style="text-align: center; margin-top: 70px;">
+
+**Congratulations on completing our Gorontalo mapping tutorial!**
+
+**Happy mapping, and see you in our next R adventure!**
+
+***Odu’olo***
+
+</div>
+
+<div style="text-align: right; margin-top: 70px;">
+
+________________
+
+**Irvan N**
+
+Belconnen, Australian Capital Territory.
+
+</div>
